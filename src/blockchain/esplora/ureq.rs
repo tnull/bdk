@@ -36,6 +36,14 @@ pub struct EsploraBlockchain {
     concurrency: u8,
 }
 
+impl Deref for EsploraBlockchain {
+    type Target = BlockingClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.url_client
+    }
+}
+
 impl EsploraBlockchain {
     /// Create a new instance of the client from a base URL and the `stop_gap`.
     pub fn new(base_url: &str, stop_gap: usize) -> Self {

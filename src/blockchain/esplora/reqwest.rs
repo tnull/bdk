@@ -12,6 +12,7 @@
 //! Esplora by way of `reqwest` HTTP client.
 
 use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 
 use bitcoin::{Transaction, Txid};
 
@@ -44,6 +45,14 @@ impl std::convert::From<AsyncClient> for EsploraBlockchain {
             stop_gap: 20,
             concurrency: super::DEFAULT_CONCURRENT_REQUESTS,
         }
+    }
+}
+
+impl Deref for EsploraBlockchain {
+    type Target = AsyncClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.url_client
     }
 }
 
