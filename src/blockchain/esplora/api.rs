@@ -1,16 +1,16 @@
 //! structs from the esplora API
 //!
 //! see: <https://github.com/Blockstream/esplora/blob/master/API.md>
-use crate::BlockTime;
-use bitcoin::{OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness};
+use crate::{BlockTime, Error};
+use bitcoin::{OutPoint, Script, Transaction, TxIn, TxOut, Txid, Witness, BlockHash};
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct PrevOut {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct Vin {
     pub txid: Txid,
     pub vout: u32,
@@ -23,20 +23,58 @@ pub struct Vin {
     pub is_coinbase: bool,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct Vout {
     pub value: u64,
     pub scriptpubkey: Script,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[maybe_async]
+/// Trait for getting the status of a transaction by txid
+pub trait GetTxStatus {
+    /// Fetch the status of a transaction given its txid
+    fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error>;
+}
+
+#[derive(serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct TxStatus {
     pub confirmed: bool,
     pub block_height: Option<u32>,
+	pub block_hash: Option<BlockHash>,
     pub block_time: Option<u64>,
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[maybe_async]
+/// Trait for getting a merkle proof of inclusion for a transaction
+pub trait GetMerkleProof {
+    /// Fetch the merkle proof of a transaction given its txid
+    fn get_merkle_proof(&self, txid: &Txid, block_height: u32) -> Result<Option<MerkleProof>, Error>;
+}
+
+#[derive(serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct MerkleProof {
+    block_height: u32,
+    merkle: Vec<Txid>,
+    pos: usize,
+}
+
+#[maybe_async]
+/// Trait for getting the spending status of an output
+pub trait GetOutputStatus {
+    /// Fetch the output spending status given a txid and vout
+    fn get_output_status(&self, txid: &Txid, vout: &Vout) -> Result<Option<OutputStatus>, Error>;
+}
+
+#[derive(serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct OutputStatus {
+	spent: bool,
+	txid: Option<Txid>,
+	vin: Option<Vin>,
+	status: Option<TxStatus>,
+}
+
+
+#[derive(serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct Tx {
     pub txid: Txid,
     pub version: i32,
@@ -84,6 +122,7 @@ impl Tx {
                 confirmed: true,
                 block_height: Some(height),
                 block_time: Some(timestamp),
+				..
             } => Some(BlockTime { timestamp, height }),
             _ => None,
         }

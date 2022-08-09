@@ -24,7 +24,7 @@ use log::{debug, error, info, trace};
 use ::reqwest::{Client, StatusCode};
 use futures::stream::{FuturesOrdered, TryStreamExt};
 
-use super::api::Tx;
+use super::api::{Tx, Vout, TxStatus, MerkleProof, OutputStatus, GetTxStatus, GetMerkleProof, GetOutputStatus};
 use crate::blockchain::esplora::EsploraError;
 use crate::blockchain::*;
 use crate::database::BatchDatabase;
@@ -118,10 +118,31 @@ impl GetTx for EsploraBlockchain {
 }
 
 #[maybe_async]
+impl GetTxStatus for EsploraBlockchain {
+    fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
+        Ok(await_or_block!(self.url_client._get_tx_status(txid))?)
+    }
+}
+
+#[maybe_async]
 impl GetBlockHash for EsploraBlockchain {
     fn get_block_hash(&self, height: u64) -> Result<BlockHash, Error> {
         let block_header = await_or_block!(self.url_client._get_header(height as u32))?;
         Ok(block_header.block_hash())
+    }
+}
+
+#[maybe_async]
+impl GetMerkleProof for EsploraBlockchain {
+    fn get_merkle_proof(&self, txid: &Txid, _block_height: u32) -> Result<Option<MerkleProof>, Error> {
+        Ok(await_or_block!(self.url_client._get_merkle_proof(txid))?)
+    }
+}
+
+#[maybe_async]
+impl GetOutputStatus for EsploraBlockchain {
+    fn get_output_status(&self, txid: &Txid, vout: &Vout) -> Result<Option<OutputStatus>, Error> {
+        Ok(await_or_block!(self.url_client._get_output_status(txid, vout))?)
     }
 }
 
@@ -232,6 +253,21 @@ impl UrlClient {
         Ok(Some(deserialize(&resp.error_for_status()?.bytes().await?)?))
     }
 
+	async fn _get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, EsploraError> {
+		let resp = self
+			.client
+			.get(&format!("{}/tx/{}/status", self.url, txid))
+			.send()
+			.await?;
+
+		if let StatusCode::NOT_FOUND = resp.status() {
+			return Ok(None);
+		}
+
+		Ok(Some(resp.error_for_status()?.json().await?))
+	}
+
+
     async fn _get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, EsploraError> {
         match self._get_tx(txid).await {
             Ok(Some(tx)) => Ok(tx),
@@ -239,6 +275,34 @@ impl UrlClient {
             Err(e) => Err(e),
         }
     }
+
+	async fn _get_merkle_proof(&self, tx_hash: &Txid) -> Result<Option<MerkleProof>, EsploraError> {
+		let resp = self
+			.client
+			.get(&format!("{}/tx/{}/merkle-proof", self.url, tx_hash))
+			.send()
+			.await?;
+
+		if let StatusCode::NOT_FOUND = resp.status() {
+			return Ok(None);
+		}
+
+		Ok(Some(resp.error_for_status()?.json().await?))
+	}
+
+	async fn _get_output_status(&self, txid: &Txid, vout: &Vout) -> Result<Option<OutputStatus>, EsploraError> {
+		let resp = self
+			.client
+			.get(&format!("{}/tx/{}/outspend/{}", self.url, txid, vout.value))
+			.send()
+			.await?;
+
+		if let StatusCode::NOT_FOUND = resp.status() {
+			return Ok(None);
+		}
+
+		Ok(Some(resp.error_for_status()?.json().await?))
+	}
 
     async fn _get_header(&self, block_height: u32) -> Result<BlockHeader, EsploraError> {
         let resp = self

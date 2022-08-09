@@ -26,7 +26,7 @@ use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::hashes::{sha256, Hash};
 use bitcoin::{BlockHeader, Script, Transaction, Txid};
 
-use super::api::Tx;
+use super::api::{Tx, Vout, TxStatus, MerkleProof, OutputStatus, GetTxStatus, GetMerkleProof, GetOutputStatus};
 use crate::blockchain::esplora::EsploraError;
 use crate::blockchain::*;
 use crate::database::BatchDatabase;
@@ -112,10 +112,28 @@ impl GetTx for EsploraBlockchain {
     }
 }
 
+impl GetTxStatus for EsploraBlockchain {
+    fn get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, Error> {
+        Ok(self.url_client._get_tx_status(txid)?)
+    }
+}
+
 impl GetBlockHash for EsploraBlockchain {
     fn get_block_hash(&self, height: u64) -> Result<BlockHash, Error> {
         let block_header = self.url_client._get_header(height as u32)?;
         Ok(block_header.block_hash())
+    }
+}
+
+impl GetMerkleProof for EsploraBlockchain {
+    fn get_merkle_proof(&self, txid: &Txid, _block_height: u32) -> Result<Option<MerkleProof>, Error> {
+		Ok(self.url_client._get_merkle_proof(txid)?)
+    }
+}
+
+impl GetOutputStatus for EsploraBlockchain {
+    fn get_output_status(&self, txid: &Txid, vout: &Vout) -> Result<Option<OutputStatus>, Error> {
+		Ok(self.url_client._get_output_status(txid, vout)?)
     }
 }
 
@@ -235,6 +253,24 @@ impl UrlClient {
         }
     }
 
+	fn _get_tx_status(&self, txid: &Txid) -> Result<Option<TxStatus>, EsploraError> {
+		let resp = self
+			.agent
+			.get(&format!("{}/tx/{}/status", self.url, txid))
+			.call();
+
+		match resp {
+			Ok(resp) => Ok(Some(resp.into_json()?)),
+			Err(ureq::Error::Status(code, _)) => {
+				if is_status_not_found(code) {
+					return Ok(None);
+				}
+				Err(EsploraError::HttpResponse(code))
+			}
+			Err(e) => Err(EsploraError::Ureq(e)),
+		}
+	}
+
     fn _get_tx_no_opt(&self, txid: &Txid) -> Result<Transaction, EsploraError> {
         match self._get_tx(txid) {
             Ok(Some(tx)) => Ok(tx),
@@ -269,6 +305,42 @@ impl UrlClient {
             Err(e) => Err(EsploraError::Ureq(e)),
         }
     }
+
+    fn _get_merkle_proof(&self, txid: &Txid) -> Result<Option<MerkleProof>, EsploraError> {
+		let resp = self
+			.agent
+			.get(&format!("{}/tx/{}/merkle-proof", self.url, txid))
+			.call();
+
+		match resp {
+			Ok(resp) => Ok(Some(resp.into_json()?)),
+			Err(ureq::Error::Status(code, _)) => {
+				if is_status_not_found(code) {
+					return Ok(None);
+				}
+				Err(EsploraError::HttpResponse(code))
+			}
+			Err(e) => Err(EsploraError::Ureq(e)),
+		}
+	}
+
+    fn _get_output_status(&self, txid: &Txid, vout: &Vout) -> Result<Option<OutputStatus>, EsploraError> {
+		let resp = self
+			.agent
+			.get(&format!("{}/tx/{}/outspend/{}", self.url, txid, vout.value))
+			.call();
+
+		match resp {
+			Ok(resp) => Ok(Some(resp.into_json()?)),
+			Err(ureq::Error::Status(code, _)) => {
+				if is_status_not_found(code) {
+					return Ok(None);
+				}
+				Err(EsploraError::HttpResponse(code))
+			}
+			Err(e) => Err(EsploraError::Ureq(e)),
+		}
+	}
 
     fn _broadcast(&self, transaction: &Transaction) -> Result<(), EsploraError> {
         let resp = self
