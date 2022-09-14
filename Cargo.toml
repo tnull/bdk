@@ -23,7 +23,7 @@ rand = "^0.7"
 # Optional dependencies
 sled = { version = "0.34", optional = true }
 electrum-client = { version = "0.10", optional = true }
-esplora-client = { git = "https://github.com/tnull/rust-esplora-client.git", branch = "2022-09-add-get-txid-at-block-index", default-features = false, optional = true }
+esplora-client = { git = "https://github.com/bitcoindevkit/rust-esplora-client.git", branch = "master", default-features = false, optional = true }
 rusqlite = { version = "0.27.0", optional = true }
 ahash = { version = "0.7.6", optional = true }
 futures = { version = "0.3", optional = true }
